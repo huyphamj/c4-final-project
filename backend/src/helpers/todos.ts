@@ -5,7 +5,7 @@ import { CreateTodoRequest } from '../requests/CreateTodoRequest'
 import { UpdateTodoRequest } from '../requests/UpdateTodoRequest'
 import { createLogger } from '../utils/logger'
 import * as uuid from 'uuid'
-import * as createError from 'http-errors'
+import { TodoUpdate } from '../models/TodoUpdate';
 
 const logger = createLogger('Todos')
 const todosAccess = new TodosAccess()
@@ -15,6 +15,7 @@ export async function createTodo(
     createTodoRequest: CreateTodoRequest,
     userId: string
 ) {
+    logger.info('creating todo', { createTodoRequest, userId })
     const todoId = uuid.v4()
     const todo: TodoItem = {
         userId,
@@ -31,10 +32,11 @@ export async function createTodo(
     return createdTodo
 }
 
-export async function getTodosForUser(userId: string) {
+export async function getTodosForUser(userId: string): Promise<TodoItem[]> {
+    logger.info('getting todos for user', { userId })
     var todos = await todosAccess.getTodoByUser(userId)
-    todos.forEach(e => e.attachmentUrl = attachmentUtils.getAttachmentUrl(e.attachmentUrl))
-    return todos
+    todos.forEach(e => e.attachmentUrl = attachmentUtils.getAttachmentUrl(e.todoId))
+    return todos as TodoItem[]
 }
 
 export async function updateTodo(
@@ -42,44 +44,26 @@ export async function updateTodo(
     updateTodoRequest: UpdateTodoRequest,
     userId: string
 ) {
-    const todo = await todosAccess.getTodo(todoId)
-    if (!todo) {
-        logger.error(`Todo with id ${todoId} not found`)
-        throw createError(404, 'Todo not found')
-    }
-    if (todo[0].userId !== userId) {
-        throw createError(403, 'Unauthorized')
-    }
-
-    const updatedTodo: TodoItem = {
-        userId,
-        todoId,
-        createdAt: todo[0].createdAt,
+    logger.info('updating todo', { todoId, updateTodoRequest, userId })
+    
+    const updatedTodo: TodoUpdate = {
         name: updateTodoRequest.name,
         dueDate: updateTodoRequest.dueDate,
         done: updateTodoRequest.done,
-        attachmentUrl: todo[0].attachmentUrl
     }
 
-    const updatedTodoItem = await todosAccess.updateTodo(todoId, updatedTodo)
+    const updatedTodoItem = await todosAccess.updateTodo(todoId, userId, updatedTodo)
 
     return updatedTodoItem
 }
 
 export async function deleteTodo(todoId: string, userId: string) {
-    const todo = await todosAccess.getTodo(todoId)
-    if (!todo) {
-        logger.error(`Todo with id ${todoId} not found`)
-        throw createError(404, 'Todo not found')
-    }
-    if (todo[0].userId !== userId) {
-        logger.error(`User ${userId} does not have access to delete todo ${todoId}`)
-        throw createError(401, 'Unauthorized')
-    }
-    return await todosAccess.deleteTodo(todoId)
+    logger.info('deleting todo', { todoId, userId })
+    return await todosAccess.deleteTodo(todoId, userId)
 }
 
-export async function createAttachmentPresignedUrl(todoId: string) {
+export async function createAttachmentPresignedUrl(todoId: string, userId: string) {
+    logger.info('creating attachment presigned url', { todoId, userId })
     const attachmentUrl = await attachmentUtils.getPresignedUrl(todoId)
     return attachmentUrl
 }
